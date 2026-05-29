@@ -273,6 +273,7 @@ footer{text-align:center;opacity:.35;margin-top:20px;font-size:11px;max-width:48
 
 <script>
 const FB='https://treinamento-faiston-default-rtdb.firebaseio.com/players';
+const FB_SCORE='https://treinamento-faiston-default-rtdb.firebaseio.com/scores';
 async function fbSave(d){
   try{
     const r=await fetch(`${FB}/${d.charId}.json`,{method:'PUT',body:JSON.stringify(d)});
@@ -289,7 +290,22 @@ async function fbLoad(){
   }catch(e){console.error('fbLoad erro:',e);return[];}
 }
 async function fbDel(id){try{await fetch(`${FB}/${id}.json`,{method:'DELETE'});}catch(e){}}
-async function fbReset(){try{await fetch(`${FB}.json`,{method:'DELETE'});}catch(e){}}
+async function fbReset(){
+  try{
+    await fetch(`${FB}.json`,{method:'DELETE'});
+    await fetch(`${FB_SCORE}.json`,{method:'DELETE'});
+  }catch(e){}
+}
+async function fbLoadScores(){
+  try{
+    const r=await fetch(`${FB_SCORE}.json`);
+    const d=await r.json();
+    return d?Object.values(d):[];
+  }catch(e){return[];}
+}
+async function fbSaveScore(d){
+  try{ await fetch(`${FB_SCORE}/${d.charId}_${Date.now()}.json`,{method:'PUT',body:JSON.stringify(d)}); }catch(e){}
+}
 
 const CHARS=[
   {id:'fox',  em:'🦊',nm:'Raposa Agil',     ds:'Rapida e perspicaz'},
@@ -337,12 +353,10 @@ const DQ=[
   {txt:'Qual e o melhor momento para planejar as tarefas do dia seguinte?',opts:['Logo ao acordar','No final do expediente anterior','No almoco','Quando der tempo'],ans:1,exp:'Planejar no fim do expediente permite comecar o dia com direcao.'},
 ];
 const MI=[
-  {id:'m1',txt:'SLA estourado',    cor:'q-ui'},
-  {id:'m2',txt:'Treinar equipe',   cor:'q-ni'},
-  {id:'m3',txt:'Grupo de avisos',  cor:'q-up'},
-  {id:'m4',txt:'Organizar mesa',   cor:'q-nn'},
-  {id:'m5',txt:'Falha no sistema', cor:'q-ui'},
-  {id:'m6',txt:'Melhorar processo',cor:'q-ni'},
+  {id:'m1',txt:'Cliente com operacao parada',          cor:'q-ui'},
+  {id:'m2',txt:'Treinar a equipe em um novo processo', cor:'q-ni'},
+  {id:'m3',txt:'Agendar uma reuniao operacional',      cor:'q-up'},
+  {id:'m4',txt:'Conversa paralela em grupo de WhatsApp',cor:'q-nn'},
 ];
 
 let player={char:null,pname:'',pts:0,done:[]};
@@ -696,16 +710,20 @@ function goReflection(){
 }
 
 async function renderPainel(){
-  const players=(await fbLoad()).sort((a,b)=>b.pts-a.pts);
+  const ativos=await fbLoad();
+  const finalizados=await fbLoadScores();
+  // combina: finalizados + ativos que ainda nao terminaram
+  const todos=[...finalizados, ...ativos].sort((a,b)=>b.pts-a.pts);
   const maxPts=GAMES.reduce((s,g)=>s+g.pts,0);
   const grid=el('painel-grid');
   if(!grid) return;
-  if(!players.length){
+  if(!todos.length){
     grid.innerHTML='<div style="grid-column:1/-1;text-align:center;opacity:.4;padding:32px;"><p>Nenhum jogador ainda...</p></div>';
     return;
   }
-  grid.innerHTML=players.map((p,i)=>{
+  grid.innerHTML=todos.map((p,i)=>{
     const pct=Math.round((p.pts/maxPts)*100);
+    const terminou=p.playerName && p.done.length>=GAMES.length;
     return `<div class="pc ${i===0?'top':''}">
       ${i===0?'<div style="font-size:20px;margin-bottom:4px;">🥇</div>':''}
       <div class="pc-em">${p.emoji}</div>
@@ -714,7 +732,7 @@ async function renderPainel(){
       <div class="pc-pts">${p.pts}</div>
       <div style="font-size:11px;opacity:.5;">pontos</div>
       <div class="pc-bar"><div class="pc-bfill" style="width:${pct}%"></div></div>
-      <div class="pc-badge">${p.done.length}/${GAMES.length} desafios</div>
+      <div class="pc-badge">${terminou?'✅ Finalizado':p.done.length+'/'+GAMES.length+' desafios'}</div>
     </div>`;
   }).join('');
 }
