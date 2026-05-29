@@ -5,7 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Desafio da Gestão do Tempo · Faiston</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@400;700&family=Roboto:wght@300;400&display=swap" rel="stylesheet"/>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@400;700&family=Roboto:wght@300;400&display=swap');
+</style>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{background-color:#151720;color:#fff;min-height:100vh;padding:20px;font-family:'Roboto',sans-serif;font-weight:300;}
@@ -281,6 +283,27 @@ footer{text-align:center;opacity:.4;margin-top:24px;font-size:12px;max-width:480
 <footer><p>Desafio da Gestão do Tempo · Faiston</p></footer>
 
 <script>
+// ===================== FIREBASE =====================
+const FB_URL = 'https://treinamento-faiston-default-rtdb.firebaseio.com/players';
+
+async function fbSavePlayer(data){
+  await fetch(`${FB_URL}/${data.charId}.json`, {
+    method: 'PUT',
+    body: JSON.stringify(data)
+  });
+}
+
+async function fbLoadPlayers(){
+  const res = await fetch(`${FB_URL}.json`);
+  const data = await res.json();
+  if(!data) return [];
+  return Object.values(data);
+}
+
+async function fbDeletePlayer(charId){
+  await fetch(`${FB_URL}/${charId}.json`, { method: 'DELETE' });
+}
+
 const CHARS = [
   {id:'fox',    emoji:'🦊', name:'Raposa Agil',        desc:'Rapida e perspicaz'},
   {id:'owl',    emoji:'🦉', name:'Coruja Sabia',        desc:'Estrategica e calma'},
@@ -370,16 +393,21 @@ function goTo(id){
   window.scrollTo(0,0);
 }
 function goMap(){ renderMap(); goTo('screen-map'); }
-function goHome(){
+async function goHome(){
+  if(player.char){
+    await fbDeletePlayer(player.char.id);
+  }
   player={char:null,pts:0,done:[]};
   const btn=document.getElementById('btn-start');
   if(btn){btn.style.opacity='0.4';btn.style.pointerEvents='none';}
-  renderChars();
+  await renderChars();
   goTo('screen-welcome');
 }
 
-function renderChars(){
-  const taken=allPlayers.map(p=>p.charId);
+async function renderChars(){
+  const data = await fbLoadPlayers();
+  allPlayers = data;
+  const taken = allPlayers.map(p=>p.charId);
   document.getElementById('char-list').innerHTML=CHARS.map(c=>`
     <div class="char-card ${taken.includes(c.id)?'locked':''}" id="cc-${c.id}" onclick="selectChar('${c.id}')">
       <div class="char-emoji">${c.emoji}</div>
@@ -438,9 +466,11 @@ function renderMap(){
   }).join('');
 }
 
-function savePlayer(){
-  const idx=allPlayers.findIndex(p=>p.charId===player.char.id);
-  const d={charId:player.char.id,emoji:player.char.emoji,name:player.char.name,pts:player.pts,done:[...player.done]};
+async function savePlayer(){
+  const d = {charId:player.char.id, emoji:player.char.emoji, name:player.char.name, pts:player.pts, done:[...player.done]};
+  await fbSavePlayer(d);
+  // atualiza cache local
+  const idx = allPlayers.findIndex(p=>p.charId===player.char.id);
   if(idx>=0) allPlayers[idx]=d; else allPlayers.push(d);
 }
 
@@ -594,10 +624,10 @@ function checkMatriz(){
   setTimeout(()=>{markDone('matriz');goMap();},1800);
 }
 
-function renderRanking(){
-  const sorted=[...allPlayers].sort((a,b)=>b.pts-a.pts);
+async function renderRanking(){
+  const sorted = (await fbLoadPlayers()).sort((a,b)=>b.pts-a.pts);
   const medals=['🥇','🥈','🥉'];
-  document.getElementById('ranking-list').innerHTML=sorted.map((p,i)=>`
+  document.getElementById('ranking-list').innerHTML = sorted.map((p,i)=>`
     <div class="rank-item">
       <div class="rank-pos">${medals[i]||i+1}</div>
       <div class="rank-emoji">${p.emoji}</div>
